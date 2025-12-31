@@ -25,6 +25,10 @@ on:
         description: 'OrangeFox Device Tree Branch'
         required: true
         default: 'fox_12.1'
+        type: choice
+        options:
+        - fox_12.1
+        - android-12.1
       DEVICE_PATH:
         description: 'Specify your Device Path'
         required: true
