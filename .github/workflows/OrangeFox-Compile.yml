@@ -34,10 +34,24 @@ on:
         description: 'Specify your Device Path'
         required: true
         default: 'device/xiaomi/umi'
+        type: choice
+        options:
+        - device/xiaomi/umi
+        - device/xiaomi/apollo
+        - device/xiaomi/cas
+        - device/xiaomi/cmi
+        - device/xiaomi/lmi
       DEVICE_NAME:
         description: 'Specify your Device Codename'
         required: true
         default: 'umi'
+        type: choice
+        options:
+        - umi
+        - apollo
+        - cas
+        - cmi
+        - lmi
       BUILD_TARGET:
         description: 'Specify your Build Target'
         required: true
