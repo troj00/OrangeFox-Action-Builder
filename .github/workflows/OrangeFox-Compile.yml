@@ -29,6 +29,7 @@ on:
         type: choice
         options:
         - fox_12.1
+        - fox_14.1
         - android-12.1
       DEVICE_PATH:
         description: 'Specify your Device Path'
