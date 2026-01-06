@@ -1,0 +1,151 @@
+name: Сборка OrangeFox Recovery
+
+on:
+  workflow_dispatch:
+    inputs:
+      MANIFEST_BRANCH:
+        description: 'OrangeFox Manifest Branch'
+        required: true
+        default: '12.1'
+        type: choice
+        options:
+        - 14.1
+        - 12.1
+        - 11.0
+      DEVICE_TREE:
+        description: 'OrangeFox Device Tree'
+        required: true
+        default: 'https://github.com/troj00/recovery_android_device_xiaomi_umi'
+      DEVICE_TREE_BRANCH:
+        description: 'OrangeFox Device Tree Branch'
+        required: true
+        default: 'fox_12.1'
+        type: choice
+        options:
+        - fox_12.1
+        - fox_14.1
+        - android-12.1
+      DEVICE_PATH:
+        description: 'Specify your Device Path'
+        required: true
+        default: 'device/xiaomi/umi'
+        type: choice
+        options:
+        - device/xiaomi/umi
+        - device/xiaomi/apollo
+        - device/xiaomi/cas
+        - device/xiaomi/cmi
+        - device/xiaomi/lmi
+      DEVICE_NAME:
+        description: 'Specify your Device Codename'
+        required: true
+        default: 'umi'
+        type: choice
+        options:
+        - umi
+        - apollo
+        - cas
+        - cmi
+        - lmi
+      BUILD_TARGET:
+        description: 'Specify your Build Target'
+        required: true
+        default: 'recovery'
+        type: choice
+        options:
+        - boot
+        - recovery
+        - vendorboot
+
+jobs:
+  build:
+    name: Сборка OFR by ${{ github.actor }}
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    permissions:
+      contents: write
+
+    steps:
+    - name: Проверка исходного кода
+      uses: actions/checkout@v6
+              
+    - name: Очистка дискового пространства
+      uses: Nefarius80/slimhub_actions@main
+
+    - name: Настройка swap
+      uses: pierotofy/set-swap-space@master
+      with:
+        swap-size-gb: 30
+      
+    - name: Настройка среды разработки
+      run: |
+        sudo apt install aria2 ccache -y
+        git clone https://gitlab.com/OrangeFox/misc/scripts.git -b master
+        cd scripts
+        sudo bash setup/android_build_env.sh
+      
+    - name: Set-up Manifest
+      if: inputs.MANIFEST_BRANCH == '11.0' || inputs.MANIFEST_BRANCH == '12.1' || inputs.MANIFEST_BRANCH == '14.1'
+      run: |
+        mkdir -p ${GITHUB_WORKSPACE}/OrangeFox
+        cd ${GITHUB_WORKSPACE}/OrangeFox
+        git config --global user.name "${{ github.actor }}"
+        git config --global user.email "${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com"
+        git clone https://gitlab.com/OrangeFox/sync.git -b master
+        cd sync
+        ./orangefox_sync.sh --branch ${{ inputs.MANIFEST_BRANCH }} --path ${GITHUB_WORKSPACE}/OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}
+
+    # === Cache for repo and ccache ===
+    - name: Cache Repo & ccache
+      uses: actions/cache@v5
+      with:
+        path: |
+          ${GITHUB_WORKSPACE}/OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}/.repo
+          ~/.ccache
+        key: orangefox-${{ inputs.MANIFEST_BRANCH }}-${{ runner.os }}-${{ hashFiles('**/manifest.xml') }}
+        restore-keys: |
+          orangefox-${{ inputs.MANIFEST_BRANCH }}-${{ runner.os }}-
+
+    - name: Клонирую Device Tree
+      run: |
+        cd ${GITHUB_WORKSPACE}/OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}
+        git clone ${{ inputs.DEVICE_TREE }} -b ${{ inputs.DEVICE_TREE_BRANCH }} ./${{ inputs.DEVICE_PATH }}
+        cd ${{ inputs.DEVICE_PATH }}
+        echo "COMMIT_ID=$(git rev-parse HEAD)" >> $GITHUB_ENV
+
+    - name: Настройка ccache
+      run: |
+        export USE_CCACHE=1
+        export CCACHE_EXEC=$(which ccache)
+        ccache -M 50G
+        ccache -o compression=true
+        ccache -o max_size=50G
+
+    - name: Сборка OrangeFox Recovery
+      run: |
+        cd ${GITHUB_WORKSPACE}/OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}
+        set +e
+        source build/envsetup.sh
+        export ALLOW_MISSING_DEPENDENCIES=true
+        set -e
+        lunch twrp_${{ inputs.DEVICE_NAME }}-eng && make clean && mka adbd ${{ inputs.BUILD_TARGET }}image
+
+    - name: Установка свойств выпуска
+      run: |
+        echo "BUILD_DATE=$(TZ=Europe/Kyiv date +%d%m%Y)" >> $GITHUB_ENV
+        cd ${GITHUB_WORKSPACE}/OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}
+
+    - name: Релиз
+      uses: softprops/action-gh-release@v2
+      with:
+        files: |
+          OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}/out/target/product/${{ inputs.DEVICE_NAME }}/OrangeFox*.img
+          OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}/out/target/product/${{ inputs.DEVICE_NAME }}/OrangeFox*.zip
+        name: OrangeFox Recovery для ${{ inputs.DEVICE_NAME }} // ${{ env.BUILD_DATE }}
+        tag_name: ${{ github.run_id }}
+        body: |
+          ## Стабильная сборка OrangeFox Recovery
+          Build: fox_${{ inputs.MANIFEST_BRANCH }}
+          Device: [Device Tree/Branch](${{ inputs.DEVICE_TREE }}/tree/${{ inputs.DEVICE_TREE_BRANCH }})
+          Commit: Most recent [commit](${{ inputs.DEVICE_TREE }}/commit/${{ env.COMMIT_ID }}) during building.
