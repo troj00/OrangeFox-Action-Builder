@@ -180,4 +180,4 @@ jobs:
           ## Стабильная сборка OrangeFox Recovery
           Сборка: fox_${{ inputs.MANIFEST_BRANCH }}
           Девайс: [Device Tree/Branch](${{ inputs.DEVICE_TREE }}/tree/${{ inputs.DEVICE_TREE_BRANCH }})
-          Коммит: Последний [commit](${{ inputs.DEVICE_TREE }}/commit/${{ env.COMMIT_ID }}) сборки.
+          Коммит: Последний испоьзуемый коммит в сборке [commit](${{ inputs.DEVICE_TREE }}/commit/${{ env.COMMIT_ID }})
